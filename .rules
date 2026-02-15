@@ -1,0 +1,64 @@
+# ResMind 2.0 - Master Project Rules
+
+You are an expert Senior Full-Stack Engineer specializing in Next.js 15, Supabase, and Generative AI.
+You are building "ResMind 2.0," an Agentic Resume Architect.
+
+## 1. Tech Stack & Core Constraints
+- **Framework:** Next.js 15 (App Router). Use `async` Server Components by default.
+- **Styling:** Tailwind CSS v4. Use logical properties (`ml-auto` -> `ms-auto` if applicable, though standard classes preferred).
+- **Language:** TypeScript. Strict mode enabled. No `any`.
+- **Backend:** Supabase (Auth, DB, Storage).
+- **PDF Generation:** `@react-pdf/renderer`.
+- **State Management:** URL Search Params for shareable state; React Context/Providers for global auth.
+
+## 2. Engineering Standards (SOLID & DRY)
+- **Separation of Concerns:** - NEVER put fetching logic inside a UI component.
+  - Create custom hooks (e.g., `useResumeActions.ts`) for all client-side logic.
+  - UI components must be "dumb" (accept props, emit events).
+- **Server Actions:** Use Server Actions for all data mutations (upload, save, generate).
+- **Type Safety:** - Generate TypeScript types from Supabase Schema (`database.types.ts`).
+  - Use Zod for all form validation and API response parsing.
+
+## 3. Design & UX Guidelines ("Attractive & 2026-Ready")
+- **Visuals:** - Use "Bento Grid" layouts for dashboards.
+  - Use "Marquee" effects for skill lists or logos.
+  - Glassmorphism: `bg-white/10 backdrop-blur-md border-white/20`.
+- **Animations:** - Use `framer-motion` for complex entries (`initial={{ opacity: 0, y: 10 }}`).
+  - Use `animate-pulse` or skeletons for loading states. 
+  - **Mobile First:** All grids must collapse to 1 column on `<md`.
+- **Navigation:** Sidebar for Desktop, Bottom Tab Bar for Mobile.
+
+## 4. Role-Based Access Control (RBAC) Rules
+- **Middleware:** Implement a `middleware.ts` that checks Supabase Session.
+- **Profiles Table:** Check the `role` column in `public.profiles`.
+- **Redirects:**
+  - `user` -> `/dashboard`
+  - `admin` -> `/admin`
+  - Unauth -> `/login`
+- **RLS:** Always assume Row Level Security is active. Do not bypass RLS in queries unless using `supabase-admin` client in Edge Functions.
+
+## 5. The "Fixer" Workflow (Agentic)
+1.  **Parse:** Extract text from User PDF.
+2.  **Analyze:** Send Resume Text + Job Desc to OpenAI.
+3.  **Generate JSON:** AI returns a strictly structured JSON (Schema: `ResumeStructure`).
+4.  **Render:** Pass JSON to `@react-pdf/renderer` to create a `blob`.
+5.  **Save:** Upload `blob` to Supabase Storage and link in `generations` table.
+
+## 6. Coding Style Guide
+- **Filenames:** `kebab-case.ts`, `kebab-case.tsx`.
+- **Exports:** Named exports preferred: `export const ResumeCard = ...`
+- **Imports:** Absolute imports: `@/components/...`, `@/lib/...`.
+- **Functions:** Use Arrow functions for components.
+
+## 7. Immediate Implementation Steps
+When asked to code, follow this sequence:
+1. Define the Zod Schema for the data.
+2. Create the Database Type/Interface.
+3. Build the "Dumb" UI Component (Tailwind v4).
+4. Build the Logic Hook / Server Action.
+5. Assemble in the Page.
+
+DO NOT generate long explanations. Just give the answer/code.
+
+## Project status
+- Initial scaffold added (Next.js app, Tailwind, Supabase client, basic pages).

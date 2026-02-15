@@ -1,0 +1,115 @@
+Core Value Proposition:
+"Don't just get feedback—get a hired." ResMind 2.0 is an Agentic AI that takes a user's rough resume and a target job description, analyzes the gaps, rewrites the content for ATS optimization, and renders a brand-new, perfectly formatted PDF.
+
+User Roles:
+
+User (Job Seeker): Can upload resumes, paste job descriptions, view analysis, and download generated PDFs.
+
+Admin: Can view global stats, manage users, and update system prompts/templates.
+
+Key Features (2026 Scenarios):
+
+Agentic "Fixer": AI doesn't just suggest changes; it executes them (rewrites bullets, fixes grammar, reorders sections).
+
+Generative PDF Engine: Converts AI-structured data into a visual PDF using React components.
+
+Visual Intelligence: Checks visual hierarchy and whitespace (simulated via strict templates).
+
+Fluid UI: Marquees for skills, Bento Grids for dashboards, and micro-interactions using Framer Motion.
+
+2. Tech Stack & Architecture
+Framework: Next.js 15 (App Router)
+
+Language: TypeScript (Strict Mode)
+
+Styling: Tailwind CSS v4 + clsx + tailwind-merge
+
+UI Components: Shadcn/UI (Base), Magic UI (for "Attractive" elements like Marquees/Bento Grids).
+
+Animations: Framer Motion (complex transitions), CSS Modules (simple hovers).
+
+Backend & Auth: Supabase (PostgreSQL, Auth, Edge Functions, Storage).
+
+AI Engine: OpenAI GPT-4o (via Vercel AI SDK for streaming).
+
+PDF Generation: @react-pdf/renderer (Renders React components to PDF).
+
+Form Handling: React Hook Form + Zod.
+
+3. Database Schema (Supabase / PostgreSQL)
+This schema supports RBAC and the "Fixer" workflow.
+
+SQL
+-- Enums
+create type user_role as enum ('user', 'admin');
+create type generation_status as enum ('pending', 'processing', 'completed', 'failed');
+
+-- 1. Profiles (Extends Supabase Auth)
+create table public.profiles (
+  id uuid references auth.users on delete cascade primary key,
+  email text not null,
+  role user_role default 'user',
+  full_name text,
+  avatar_url text,
+  credits int default 5, -- Monetization ready
+  created_at timestamptz default now()
+);
+
+-- 2. Resumes (Original Uploads)
+create table public.resumes (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  file_path text not null, -- Supabase Storage path
+  extracted_text text, -- Text extracted via OCR/Parser
+  file_name text,
+  created_at timestamptz default now()
+);
+
+-- 3. Job Descriptions
+create table public.job_descriptions (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  title text,
+  company text,
+  raw_text text not null,
+  created_at timestamptz default now()
+);
+
+-- 4. Analyses & Generations (The "Fixer" Output)
+create table public.generations (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  resume_id uuid references public.resumes(id),
+  job_id uuid references public.job_descriptions(id),
+  
+  -- Analysis Data
+  score int, -- 0-100
+  feedback_json jsonb, -- { "strengths": [], "weaknesses": [] }
+  
+  -- Generated Resume Data (The "Fixed" version)
+  structured_resume_data jsonb, -- { "personal": {}, "experience": [], "skills": [] }
+  pdf_url text, -- Path to the generated PDF
+  
+  status generation_status default 'pending',
+  created_at timestamptz default now()
+);
+
+-- RLS Policies (Security)
+alter table profiles enable row level security;
+alter table resumes enable row level security;
+alter table job_descriptions enable row level security;
+alter table generations enable row level security;
+
+-- (Policies omitted for brevity: Users can only see their own data. Admins see all.)
+4. Component Architecture (SOLID & DRY)
+We strictly separate UI from Logic.
+
+/components/ui: Dumb, stateless components (Buttons, Inputs, Cards).
+
+/components/features: Composition of UI components (e.g., ResumeUploader).
+
+/hooks: All business logic (e.g., useResumeUpload, useAIAnalysis).
+
+/lib: Utilities, API clients, and constants.
+
+/app: Pages and Layouts (Server Components where possible).
