@@ -1,40 +1,37 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).
+# ResMind 2.0
 
-## Getting Started
+AI-powered resume optimizer built with Next.js + Supabase + OpenAI. Extracts text from uploaded resumes, analyzes against job descriptions, generates optimized resume JSON and PDF, and stores results in Supabase.
 
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Quick start
+1. Install deps
+```sh
+npm install
 ```
+2. Add env vars in `.env.local` (see below)
+3. Start dev server
+```sh
+npm run dev
+```
+4. Open: http://localhost:3000
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Required environment variables
+- NEXT_PUBLIC_SUPABASE_URL
+- NEXT_PUBLIC_SUPABASE_ANON_KEY
+- SUPABASE_SERVICE_ROLE_KEY
+- OPENAI_API_KEY
 
-You can start editing the page by modifying `pages/index.tsx`. The page auto-updates as you edit the file.
+## Key features
+- Resume upload + text extraction (PDF/DOC/DOCX)
+- AI-driven resume optimization (structured JSON)
+- PDF rendering & download
+- Credit tracking per user
+- RBAC + RLS-ready Supabase setup
 
-[API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.ts`.
-
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) instead of React pages.
-
-This project uses [`next/font`](https://nextjs.org/docs/pages/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn-pages-router) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
+## Important files & entry points
+- PDF extraction: [`extractTextFromFile`](src/lib/pdf-utils.ts) — [src/lib/pdf-utils.ts](src/lib/pdf-utils.ts)  
+- AI generation API: [`handler`](src/pages/api/generate-resume.ts) — [src/pages/api/generate-resume.ts](src/pages/api/generate-resume.ts)  
+- PDF generation API: [src/pages/api/generate-pdf.ts](src/pages/api/generate-pdf.ts)  
+- AI action helpers: [`getGenerationDetailsAction`](src/actions/ai-actions.ts) and generation flow — [src/actions/ai-actions.ts](src/actions/ai-actions.ts)  
+- Dashboard list: [src/pages/dashboard/index.tsx](src/pages/dashboard/index.tsx)  
+- Generation detail page: [src/pages/dashboard/generation/[id].tsx](src/pages/dashboard/generation/[id].tsx)  
+- UI components (resume selector, PDF button): [src/components/features/resume-job-selector.tsx](src/components/features/resume-job-selector.tsx), [src/components/features/generate-pdf-button.tsx](src/components/features/generate-pdf-button.tsx)
