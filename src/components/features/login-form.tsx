@@ -8,10 +8,12 @@ import { loginAction } from '@/actions/auth-actions';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Sparkles, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 export const LoginForm = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   const {
     register,
@@ -29,8 +31,11 @@ export const LoginForm = () => {
       const result = await loginAction(data);
       if (!result.success) {
         setError(result.error || 'Login failed');
+      } else if (result.redirectTo) {
+        router.push(result.redirectTo);
       }
-    } catch (err) {
+    } catch (error) {
+      console.error('Login error:', error);
       setError('An unexpected error occurred');
     } finally {
       setLoading(false);

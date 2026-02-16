@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { generateResumeAction } from '@/actions/ai-actions';
 import { motion } from 'framer-motion';
 import { Sparkles, Loader2, CheckCircle2, Brain } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -30,18 +29,28 @@ export const GenerateResumeButton = ({
     setSuccess(false);
 
     try {
-      const result = await generateResumeAction(resumeId, jobId);
+      const response = await fetch('/api/generate-resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resumeId, jobId }),
+      });
 
-      if (!result.success) {
-        setError(result.error || 'Generation failed');
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        const errorMsg = result.error || result.details || 'Generation failed';
+        setError(errorMsg);
+        console.error('Generation error details:', result);
       } else {
         setSuccess(true);
         setTimeout(() => {
           router.push(`/dashboard/generation/${result.data?.generationId}`);
         }, 1500);
       }
-    } catch (err) {
-      setError('An unexpected error occurred');
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'An unexpected error occurred';
+      console.error('Resume generation error:', error);
+      setError(errorMsg);
     } finally {
       setGenerating(false);
     }

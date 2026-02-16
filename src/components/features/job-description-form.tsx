@@ -8,7 +8,7 @@ import { createJobDescriptionAction } from '@/actions/dashboard-actions';
 import { motion } from 'framer-motion';
 import { Loader2, CheckCircle2, Briefcase } from 'lucide-react';
 
-export const JobDescriptionForm = ({ onSuccess }: { onSuccess?: () => void }) => {
+export const JobDescriptionForm = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -37,10 +37,10 @@ export const JobDescriptionForm = ({ onSuccess }: { onSuccess?: () => void }) =>
         reset();
         setTimeout(() => {
           setSuccess(false);
-          onSuccess?.();
         }, 2000);
       }
-    } catch (err) {
+    } catch (error) {
+      console.error('Job description save error:', error);
       setError('An unexpected error occurred');
     } finally {
       setLoading(false);

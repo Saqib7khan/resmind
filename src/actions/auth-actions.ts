@@ -1,14 +1,12 @@
-'use server';
-
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/client';
 import { loginSchema, signupSchema } from '@/lib/schemas';
-import { redirect } from 'next/navigation';
 import { z } from 'zod';
+import type { Profile } from '@/types/supabase-helpers';
 
 export const loginAction = async (data: z.infer<typeof loginSchema>) => {
   const validated = loginSchema.parse(data);
-  
-  const supabase = await createServerSupabaseClient();
+
+  const supabase = createClient();
   
   const { data: authData, error } = await supabase.auth.signInWithPassword({
     email: validated.email,
@@ -25,22 +23,20 @@ export const loginAction = async (data: z.infer<typeof loginSchema>) => {
       .from('profiles')
       .select('role')
       .eq('id', authData.user.id)
-      .single();
+      .single()
+      .returns<Pick<Profile, 'role'>>();
 
-    if (profile?.role === 'admin') {
-      redirect('/admin');
-    } else {
-      redirect('/dashboard');
-    }
+    const redirectTo = profile?.role === 'admin' ? '/admin' : '/dashboard';
+    return { success: true, redirectTo };
   }
 
-  return { success: true };
+  return { success: true, redirectTo: '/dashboard' };
 };
 
 export const signupAction = async (data: z.infer<typeof signupSchema>) => {
   const validated = signupSchema.parse(data);
-  
-  const supabase = await createServerSupabaseClient();
+
+  const supabase = createClient();
   
   const { data: authData, error } = await supabase.auth.signUp({
     email: validated.email,
@@ -67,7 +63,7 @@ export const signupAction = async (data: z.infer<typeof signupSchema>) => {
 };
 
 export const logoutAction = async () => {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createClient();
   await supabase.auth.signOut();
-  redirect('/login');
+  return { success: true };
 };

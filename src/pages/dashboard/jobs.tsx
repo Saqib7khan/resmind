@@ -1,12 +1,27 @@
+"use client";
+
+import { useEffect, useState } from 'react';
 import { DashboardLayout } from '@/components/layouts/dashboard-layout';
 import { JobDescriptionForm } from '@/components/features/job-description-form';
 import { getJobDescriptionsAction } from '@/actions/dashboard-actions';
-import { Briefcase, Building2 } from 'lucide-react';
+import { Briefcase, Building2, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import type { JobDescription } from '@/types/supabase-helpers';
 
-export default async function JobsPage() {
-  const result = await getJobDescriptionsAction();
-  const jobs = result.data || [];
+export default function JobsPage() {
+  const [jobs, setJobs] = useState<JobDescription[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadJobs = async () => {
+      setLoading(true);
+      const result = await getJobDescriptionsAction();
+      setJobs((result.data || []) as JobDescription[]);
+      setLoading(false);
+    };
+
+    loadJobs();
+  }, []);
 
   return (
     <DashboardLayout>
@@ -22,7 +37,12 @@ export default async function JobsPage() {
           <JobDescriptionForm />
         </div>
 
-        {jobs.length === 0 ? (
+        {loading ? (
+          <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center">
+            <Loader2 className="w-12 h-12 text-gray-500 mx-auto mb-4 animate-spin" />
+            <p className="text-gray-400">Loading job descriptions...</p>
+          </div>
+        ) : jobs.length === 0 ? (
           <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center">
             <Briefcase className="w-16 h-16 text-gray-500 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-white mb-2">

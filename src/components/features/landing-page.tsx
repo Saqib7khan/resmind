@@ -104,9 +104,6 @@ export const LandingPage = () => {
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </button>
               </Link>
-              <button className="px-8 py-4 rounded-xl border border-white/20 hover:bg-white/10 transition-all font-semibold text-lg">
-                Watch Demo
-              </button>
             </motion.div>
           </div>
 

@@ -34,7 +34,8 @@ export const SignupForm = () => {
       } else {
         setSuccess(result.message || 'Account created successfully!');
       }
-    } catch (err) {
+    } catch (error) {
+      console.error('Signup error:', error);
       setError('An unexpected error occurred');
     } finally {
       setLoading(false);

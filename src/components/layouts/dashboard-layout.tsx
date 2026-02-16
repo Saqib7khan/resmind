@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { logoutAction } from '@/actions/auth-actions';
+import { useRouter } from 'next/navigation';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
@@ -32,9 +33,11 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
   const { profile, user } = useAuth();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const router = useRouter();
 
   const handleLogout = async () => {
     await logoutAction();
+    router.push('/login');
   };
 
   return (

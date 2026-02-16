@@ -4,7 +4,7 @@
  */
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { renderToBuffer } from '@react-pdf/renderer';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createPagesServerSupabaseClient } from '@/lib/supabase/pages-server';
 import { ResumePDFDocument } from '@/lib/pdf-generator';
 import React from 'react';
 import type { GenerationData } from '@/types/resume.types';
@@ -25,7 +25,7 @@ export default async function handler(
     }
 
     // Create Supabase client
-    const supabase = await createServerSupabaseClient();
+    const supabase = createPagesServerSupabaseClient(req, res);
 
     // Get user
     const {
@@ -93,7 +93,7 @@ export default async function handler(
     // Update generation with PDF URL
     const { error: updateError } = await supabase
       .from('generations')
-      .update({ pdf_url: publicUrl } as never)
+      .update({ pdf_url: publicUrl })
       .eq('id', generationId);
 
     if (updateError) {
@@ -108,6 +108,21 @@ export default async function handler(
     });
   } catch (error) {
     console.error('PDF generation error:', error);
+    
+    if (error instanceof Error && error.message.includes('renderToBuffer')) {
+      return res.status(500).json({
+        error: 'PDF rendering failed',
+        details: 'There was an error rendering the PDF. Please try again.',
+      });
+    }
+    
+    if (error instanceof Error && error.message.includes('storage')) {
+      return res.status(500).json({
+        error: 'Storage service unavailable',
+        details: 'Failed to save the PDF. Please try again later.',
+      });
+    }
+    
     return res.status(500).json({
       error: 'Failed to generate PDF',
       details: error instanceof Error ? error.message : 'Unknown error',

@@ -1,13 +1,18 @@
+"use client";
+
+import { useEffect, useState } from 'react';
 import { DashboardLayout } from '@/components/layouts/dashboard-layout';
 import { ResumeUploader } from '@/components/features/resume-uploader';
 import { getResumesAction, deleteResumeAction } from '@/actions/dashboard-actions';
-import { FileText, Download, Trash2 } from 'lucide-react';
+import { FileText, Trash2, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import type { Resume } from '@/types/supabase-helpers';
 
-const DeleteButton = ({ id }: { id: string }) => {
+const DeleteButton = ({ id, onDeleted }: { id: string; onDeleted: () => void }) => {
   const handleDelete = async () => {
     if (confirm('Are you sure you want to delete this resume?')) {
       await deleteResumeAction(id);
+      onDeleted();
     }
   };
 
@@ -22,9 +27,37 @@ const DeleteButton = ({ id }: { id: string }) => {
   );
 };
 
-export default async function ResumesPage() {
-  const result = await getResumesAction();
-  const resumes = result.data || [];
+export default function ResumesPage() {
+  const [resumes, setResumes] = useState<Resume[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadResumes = async (showSpinner = false) => {
+    if (showSpinner) {
+      setLoading(true);
+    }
+    const result = await getResumesAction();
+    setResumes((result.data || []) as Resume[]);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const initialLoad = async () => {
+      const result = await getResumesAction();
+      if (!isMounted) {
+        return;
+      }
+      setResumes((result.data || []) as Resume[]);
+      setLoading(false);
+    };
+
+    void initialLoad();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <DashboardLayout>
@@ -40,7 +73,12 @@ export default async function ResumesPage() {
           <ResumeUploader />
         </div>
 
-        {resumes.length === 0 ? (
+        {loading ? (
+          <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center">
+            <Loader2 className="w-12 h-12 text-gray-500 mx-auto mb-4 animate-spin" />
+            <p className="text-gray-400">Loading resumes...</p>
+          </div>
+        ) : resumes.length === 0 ? (
           <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center">
             <FileText className="w-16 h-16 text-gray-500 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-white mb-2">
@@ -73,7 +111,7 @@ export default async function ResumesPage() {
                       </p>
                     </div>
                   </div>
-                  <DeleteButton id={resume.id} />
+                  <DeleteButton id={resume.id} onDeleted={() => loadResumes(true)} />
                 </div>
 
                 <p className="text-xs text-gray-500">

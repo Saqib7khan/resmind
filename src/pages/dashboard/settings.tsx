@@ -1,6 +1,8 @@
+"use client";
+
 import { DashboardLayout } from '@/components/layouts/dashboard-layout';
 import { useAuth } from '@/contexts/auth-context';
-import { Settings, User, CreditCard } from 'lucide-react';
+import { User, CreditCard } from 'lucide-react';
 
 export default function SettingsPage() {
   const { profile, user } = useAuth();

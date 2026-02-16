@@ -74,12 +74,26 @@ create policy "Users can view own profile"
   on public.profiles for select
   using (auth.uid() = id);
 
+create policy "Users can insert own profile during signup"
+  on public.profiles for insert
+  to authenticated, anon
+  with check (auth.uid() = id);
+
 create policy "Users can update own profile"
   on public.profiles for update
   using (auth.uid() = id);
 
 create policy "Admins can view all profiles"
   on public.profiles for select
+  using (
+    exists (
+      select 1 from public.profiles
+      where id = auth.uid() and role = 'admin'
+    )
+  );
+
+create policy "Admins can update all profiles"
+  on public.profiles for update
   using (
     exists (
       select 1 from public.profiles
@@ -139,20 +153,22 @@ create policy "Admins can view all generations"
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.profiles (id, email, full_name)
+  insert into public.profiles (id, email, full_name, credits, role)
   values (
     new.id,
     new.email,
-    coalesce(new.raw_user_meta_data->>'full_name', new.email)
+    coalesce(new.raw_user_meta_data->>'full_name', new.email),
+    5,  -- Explicitly set credits to 5
+    'user'::user_role  -- Explicitly set role to 'user'
   );
   return new;
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql security definer set search_path = public;
 
 -- Trigger to create profile on user signup
 create trigger on_auth_user_created
   after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+  for each row execute function public.handle_new_user();
 
 -- Function to update updated_at timestamp
 create or replace function public.handle_updated_at()

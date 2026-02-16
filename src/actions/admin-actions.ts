@@ -1,14 +1,16 @@
 /**
  * Admin Actions - Server actions for admin functionality
  */
-'use server';
+import { createClient } from '@/lib/supabase/client';
+import type { Generation, Profile } from '@/types/supabase-helpers';
 
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { revalidatePath } from 'next/cache';
+type GenerationWithProfile = Generation & {
+  profiles: Pick<Profile, 'email' | 'full_name'> | null;
+};
 
 // Check if user is admin
 export const checkAdminStatus = async () => {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -20,18 +22,19 @@ export const checkAdminStatus = async () => {
     .from('profiles')
     .select('role')
     .eq('id', user.id)
-    .single();
+    .single()
+    .returns<Pick<Profile, 'role'>>();
 
   if (error || !profile) {
     return { isAdmin: false, error: 'Profile not found' };
   }
 
-  return { isAdmin: (profile as {role: string}).role === 'admin' };
+  return { isAdmin: profile.role === 'admin' };
 };
 
 // Get all users
 export const getAllUsersAction = async () => {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -44,9 +47,10 @@ export const getAllUsersAction = async () => {
     .from('profiles')
     .select('role')
     .eq('id', user.id)
-    .single();
+    .single()
+    .returns<Pick<Profile, 'role'>>();
 
-  if (profileError || !profile || (profile as {role: string}).role !== 'admin') {
+  if (profileError || !profile || profile.role !== 'admin') {
     return { success: false, error: 'Unauthorized - Admin access required', data: null };
   }
 
@@ -64,7 +68,7 @@ export const getAllUsersAction = async () => {
 
 // Get admin statistics
 export const getAdminStatsAction = async () => {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -77,9 +81,10 @@ export const getAdminStatsAction = async () => {
     .from('profiles')
     .select('role')
     .eq('id', user.id)
-    .single();
+    .single()
+    .returns<Pick<Profile, 'role'>>();
 
-  if (profileError || !profile || (profile as {role: string}).role !== 'admin') {
+  if (profileError || !profile || profile.role !== 'admin') {
     return { success: false, error: 'Unauthorized', data: null };
   }
 
@@ -103,7 +108,7 @@ export const getAdminStatsAction = async () => {
     failed: 0,
   };
 
-  generationStats?.forEach((gen: {status: string}) => {
+  generationStats?.forEach((gen: Pick<Generation, 'status'>) => {
     if (gen.status && gen.status in statusBreakdown) {
       statusBreakdown[gen.status as keyof typeof statusBreakdown]++;
     }
@@ -132,7 +137,7 @@ export const getAdminStatsAction = async () => {
 
 // Update user credits
 export const updateUserCreditsAction = async (userId: string, credits: number) => {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -145,28 +150,28 @@ export const updateUserCreditsAction = async (userId: string, credits: number) =
     .from('profiles')
     .select('role')
     .eq('id', user.id)
-    .single();
+    .single()
+    .returns<Pick<Profile, 'role'>>();
 
-  if (profileError || !profile || (profile as {role: string}).role !== 'admin') {
+  if (profileError || !profile || profile.role !== 'admin') {
     return { success: false, error: 'Unauthorized' };
   }
 
   const { error } = await supabase
     .from('profiles')
-    .update({ credits } as never)
+    .update({ credits })
     .eq('id', userId);
 
   if (error) {
     return { success: false, error: error.message };
   }
 
-  revalidatePath('/admin/users');
   return { success: true };
 };
 
 // Update user role
 export const updateUserRoleAction = async (userId: string, role: 'user' | 'admin') => {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -179,9 +184,10 @@ export const updateUserRoleAction = async (userId: string, role: 'user' | 'admin
     .from('profiles')
     .select('role')
     .eq('id', user.id)
-    .single();
+    .single()
+    .returns<Pick<Profile, 'role'>>();
 
-  if (profileError || !profile || (profile as {role: string}).role !== 'admin') {
+  if (profileError || !profile || profile.role !== 'admin') {
     return { success: false, error: 'Unauthorized' };
   }
 
@@ -192,20 +198,19 @@ export const updateUserRoleAction = async (userId: string, role: 'user' | 'admin
 
   const { error } = await supabase
     .from('profiles')
-    .update({ role } as never)
+    .update({ role })
     .eq('id', userId);
 
   if (error) {
     return { success: false, error: error.message };
   }
 
-  revalidatePath('/admin/users');
   return { success: true };
 };
 
 // Get all generations (admin view)
 export const getAllGenerationsAction = async () => {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -218,9 +223,10 @@ export const getAllGenerationsAction = async () => {
     .from('profiles')
     .select('role')
     .eq('id', user.id)
-    .single();
+    .single()
+    .returns<Pick<Profile, 'role'>>();
 
-  if (profileError || !profile || (profile as {role: string}).role !== 'admin') {
+  if (profileError || !profile || profile.role !== 'admin') {
     return { success: false, error: 'Unauthorized', data: null };
   }
 
@@ -231,7 +237,8 @@ export const getAllGenerationsAction = async () => {
       profiles:user_id (email, full_name)
     `)
     .order('created_at', { ascending: false })
-    .limit(100);
+    .limit(100)
+    .returns<GenerationWithProfile[]>();
 
   if (error) {
     return { success: false, error: error.message, data: null };
@@ -242,7 +249,7 @@ export const getAllGenerationsAction = async () => {
 
 // Delete user (admin only)
 export const deleteUserAction = async (userId: string) => {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -255,9 +262,10 @@ export const deleteUserAction = async (userId: string) => {
     .from('profiles')
     .select('role')
     .eq('id', user.id)
-    .single();
+    .single()
+    .returns<Pick<Profile, 'role'>>();
 
-  if (profileError || !profile || (profile as {role: string}).role !== 'admin') {
+  if (profileError || !profile || profile.role !== 'admin') {
     return { success: false, error: 'Unauthorized' };
   }
 
@@ -276,6 +284,5 @@ export const deleteUserAction = async (userId: string) => {
     return { success: false, error: error.message };
   }
 
-  revalidatePath('/admin/users');
   return { success: true };
 };

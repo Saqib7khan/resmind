@@ -5,7 +5,7 @@ import { Upload, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { uploadResumeAction } from '@/actions/dashboard-actions';
 import { motion } from 'framer-motion';
 
-export const ResumeUploader = ({ onSuccess }: { onSuccess?: () => void }) => {
+export const ResumeUploader = () => {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -44,6 +44,16 @@ export const ResumeUploader = ({ onSuccess }: { onSuccess?: () => void }) => {
     setError(null);
     setSuccess(false);
 
+    // Validate file type
+    const allowedTypes = ['.pdf', '.doc', '.docx'];
+    const fileExtension = '.' + (file.name.split('.').pop() || '').toLowerCase();
+    
+    if (!allowedTypes.includes(fileExtension)) {
+      setError('Only PDF, DOC, and DOCX files are allowed');
+      setUploading(false);
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', file);
 
@@ -52,15 +62,17 @@ export const ResumeUploader = ({ onSuccess }: { onSuccess?: () => void }) => {
       
       if (!result.success) {
         setError(result.error || 'Upload failed');
+        console.error('Upload error:', result.error);
       } else {
         setSuccess(true);
+        // Reset form or refresh data here
         setTimeout(() => {
           setSuccess(false);
-          onSuccess?.();
         }, 2000);
       }
-    } catch (err) {
-      setError('An unexpected error occurred');
+    } catch (error) {
+      console.error('Resume upload error:', error);
+      setError(error instanceof Error ? error.message : 'An unexpected error occurred');
     } finally {
       setUploading(false);
     }

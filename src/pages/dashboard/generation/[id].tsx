@@ -1,17 +1,74 @@
+"use client";
+
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/router';
 import { DashboardLayout } from '@/components/layouts/dashboard-layout';
-import { getGenerationDetailsAction } from '@/actions/ai-actions';
 import { GeneratePDFButton } from '@/components/features/generate-pdf-button';
-import { Sparkles, ArrowLeft, FileText, Brain } from 'lucide-react';
+import { Sparkles, ArrowLeft, FileText, Brain, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import type { FeedbackData, ResumeStructuredData, GenerationData } from '@/types/resume.types';
+import { createClient } from '@/lib/supabase/client';
+import type { FeedbackData, ResumeStructuredData } from '@/types/resume.types';
+import type { Generation, JobDescription, Resume } from '@/types/supabase-helpers';
 
-interface GenerationPageProps {
-  params: { id: string };
-}
+type GenerationWithRelations = Generation & {
+  resumes: Resume | null;
+  job_descriptions: JobDescription | null;
+};
 
-export default async function GenerationPage({ params }: GenerationPageProps) {
-  const result = await getGenerationDetailsAction(params.id);
-  const generation = result.data as GenerationData | null;
+export default function GenerationPage() {
+  const router = useRouter();
+  const generationId = useMemo(() => {
+    const id = router.query.id;
+    return Array.isArray(id) ? id[0] : id;
+  }, [router.query.id]);
+
+  const [generation, setGeneration] = useState<GenerationWithRelations | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadGeneration = async () => {
+      if (!generationId) {
+        return;
+      }
+
+      setLoading(true);
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('generations')
+        .select(`
+          *,
+          resumes:resume_id (*),
+          job_descriptions:job_id (*)
+        `)
+        .eq('id', generationId)
+        .eq('user_id', user.id)
+        .single()
+        .returns<GenerationWithRelations>();
+
+      setGeneration(data ?? null);
+      setLoading(false);
+    };
+
+    loadGeneration();
+  }, [generationId]);
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-4xl mx-auto text-center py-12">
+          <Loader2 className="w-10 h-10 text-gray-400 mx-auto mb-4 animate-spin" />
+          <p className="text-gray-400">Loading generation...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   if (!generation) {
     return (
@@ -58,7 +115,7 @@ export default async function GenerationPage({ params }: GenerationPageProps) {
             <ArrowLeft className="w-4 h-4 inline mr-2" />
             Back to History
           </Link>
-          <GeneratePDFButton generationId={params.id} pdfUrl={pdfUrl} />
+          {generationId && <GeneratePDFButton generationId={generationId} pdfUrl={pdfUrl} />}
         </div>
 
         {/* Feedback Section */}

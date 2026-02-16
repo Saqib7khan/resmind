@@ -1,77 +1,82 @@
-'use server';
-
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { createPagesServerSupabaseClient } from '@/lib/supabase/pages-server';
 import { openai, AI_MODELS } from '@/lib/openai';
-import { resumeStructureSchema, feedbackSchema } from '@/lib/schemas';
-import { revalidatePath } from 'next/cache';
-import type { Generation, JobDescription, Resume, Profile } from '@/types/supabase-helpers';
+import { feedbackSchema, resumeStructureSchema } from '@/lib/schemas';
+import type { Generation, JobDescription, Profile, Resume } from '@/types/supabase-helpers';
 
-type GenerationWithRelations = Generation & {
-  resumes: Resume | null;
-  job_descriptions: JobDescription | null;
-};
-
-export const generateResumeAction = async (resumeId: string, jobId: string) => {
-  const supabase = await createServerSupabaseClient();
-  
-  const { data: { user } } = await supabase.auth.getUser();
-  
-  if (!user) {
-    return { success: false, error: 'Not authenticated' };
-  }
-
-  // Check credits
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('credits')
-    .eq('id', user.id)
-    .single()
-    .returns<Pick<Profile, 'credits'>>();
-
-  if (!profile || profile.credits < 1) {
-    return { success: false, error: 'Insufficient credits' };
-  }
-
-  // Get resume and job description
-  const { data: resume } = await supabase
-    .from('resumes')
-    .select('*')
-    .eq('id', resumeId)
-    .eq('user_id', user.id)
-    .single()
-    .returns<Resume>();
-
-  const { data: job } = await supabase
-    .from('job_descriptions')
-    .select('*')
-    .eq('id', jobId)
-    .eq('user_id', user.id)
-    .single()
-    .returns<JobDescription>();
-
-  if (!resume || !job) {
-    return { success: false, error: 'Resume or job description not found' };
-  }
-
-  // Create generation record
-  const { data: generation, error: genError } = await supabase
-    .from('generations')
-    .insert({
-      user_id: user.id,
-      resume_id: resumeId,
-      job_id: jobId,
-      status: 'processing',
-    })
-    .select()
-    .single()
-    .returns<Generation>();
-
-  if (genError || !generation) {
-    return { success: false, error: 'Failed to create generation' };
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    // Call OpenAI for analysis and restructuring
+    const { resumeId, jobId } = req.body as { resumeId?: string; jobId?: string };
+
+    if (!resumeId || !jobId) {
+      return res.status(400).json({ error: 'Resume ID and Job ID are required' });
+    }
+
+    const supabase = createPagesServerSupabaseClient(req, res);
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('credits')
+      .eq('id', user.id)
+      .single()
+      .returns<Pick<Profile, 'credits'>>();
+
+    if (!profile || profile.credits < 1) {
+      return res.status(400).json({ 
+        error: 'Insufficient credits', 
+        details: 'You need at least 1 credit to generate a resume. Please purchase more credits to continue.' 
+      });
+    }
+
+    const { data: resume } = await supabase
+      .from('resumes')
+      .select('*')
+      .eq('id', resumeId)
+      .eq('user_id', user.id)
+      .single()
+      .returns<Resume>();
+
+    const { data: job } = await supabase
+      .from('job_descriptions')
+      .select('*')
+      .eq('id', jobId)
+      .eq('user_id', user.id)
+      .single()
+      .returns<JobDescription>();
+
+    if (!resume || !job) {
+      return res.status(404).json({ error: 'Resume or job description not found' });
+    }
+
+    const { data: generation, error: genError } = await supabase
+      .from('generations')
+      .insert({
+        user_id: user.id,
+        resume_id: resumeId,
+        job_id: jobId,
+        status: 'processing',
+      })
+      .select()
+      .single()
+      .returns<Generation>();
+
+    if (genError || !generation) {
+      return res.status(500).json({ error: 'Failed to create generation' });
+    }
+
     const completion = await openai.chat.completions.create({
       model: AI_MODELS.GPT4,
       messages: [
@@ -159,18 +164,15 @@ Return your response in this exact JSON format:
     });
 
     const responseContent = completion.choices[0]?.message?.content;
-    
+
     if (!responseContent) {
       throw new Error('No response from AI');
     }
 
     const aiResponse = JSON.parse(responseContent);
-
-    // Validate the response
     const feedback = feedbackSchema.parse(aiResponse.feedback);
     const resumeStructure = resumeStructureSchema.parse(aiResponse.resume);
 
-    // Update generation record
     await supabase
       .from('generations')
       .update({
@@ -182,56 +184,35 @@ Return your response in this exact JSON format:
       })
       .eq('id', generation.id);
 
-    // Deduct credit
     await supabase
       .from('profiles')
-      .update({
-        credits: profile.credits - 1,
-      })
+      .update({ credits: profile.credits - 1 })
       .eq('id', user.id);
 
-    revalidatePath('/dashboard');
-    return { success: true, data: { generationId: generation.id, feedback, resume: resumeStructure } };
+    return res.status(200).json({
+      success: true,
+      data: { generationId: generation.id, feedback, resume: resumeStructure },
+    });
   } catch (error) {
     console.error('AI generation error:', error);
-
-    // Mark generation as failed
-    await supabase
-      .from('generations')
-      .update({
-        status: 'failed',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', generation.id);
-
-    return { success: false, error: 'AI generation failed. Please try again.' };
+    
+    if (error instanceof Error && error.message.includes('OPENAI_API_KEY')) {
+      return res.status(500).json({
+        error: 'AI service is not configured',
+        details: 'The OpenAI API key is not properly configured. Please contact support.',
+      });
+    }
+    
+    if (error instanceof Error && error.message.includes('JSON')) {
+      return res.status(500).json({
+        error: 'AI response parsing failed',
+        details: 'The AI generated an invalid response. Please try again.',
+      });
+    }
+    
+    return res.status(500).json({
+      error: 'AI generation failed. Please try again.',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
-};
-
-export const getGenerationDetailsAction = async (generationId: string) => {
-  const supabase = await createServerSupabaseClient();
-  
-  const { data: { user } } = await supabase.auth.getUser();
-  
-  if (!user) {
-    return { success: false, error: 'Not authenticated', data: null };
-  }
-
-  const { data, error } = await supabase
-    .from('generations')
-    .select(`
-      *,
-      resumes:resume_id (*),
-      job_descriptions:job_id (*)
-    `)
-    .eq('id', generationId)
-    .eq('user_id', user.id)
-    .single()
-    .returns<GenerationWithRelations>();
-
-  if (error || !data) {
-    return { success: false, error: 'Generation not found', data: null };
-  }
-
-  return { success: true, data };
-};
+}

@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import type { Database } from '@/types/database.types';
 
@@ -6,7 +7,7 @@ import type { Database } from '@/types/database.types';
  * Server-side Supabase client for App Router
  * Use this in Server Components, Server Actions, and Route Handlers
  */
-export const createServerSupabaseClient = async () => {
+export const createServerSupabaseClient = async (): Promise<SupabaseClient<Database>> => {
   const cookieStore = await cookies();
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

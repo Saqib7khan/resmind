@@ -1,20 +1,36 @@
+"use client";
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 import { DashboardLayout } from '@/components/layouts/dashboard-layout';
 import { checkAdminStatus, getAllUsersAction } from '@/actions/admin-actions';
-import { redirect } from 'next/navigation';
-import { Users, Shield, DollarSign } from 'lucide-react';
+import { Users, Shield, DollarSign, Loader2 } from 'lucide-react';
 import { UserManagementRow } from '@/components/features/user-management-row';
 import Link from 'next/link';
 import type { AdminProfile } from '@/types/admin.types';
 
-export default async function AdminUsersPage() {
-  const { isAdmin } = await checkAdminStatus();
+export default function AdminUsersPage() {
+  const router = useRouter();
+  const [users, setUsers] = useState<AdminProfile[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  if (!isAdmin) {
-    redirect('/dashboard');
-  }
+  useEffect(() => {
+    const loadUsers = async () => {
+      setLoading(true);
+      const { isAdmin } = await checkAdminStatus();
 
-  const result = await getAllUsersAction();
-  const users = (result.data || []) as AdminProfile[];
+      if (!isAdmin) {
+        router.push('/dashboard');
+        return;
+      }
+
+      const result = await getAllUsersAction();
+      setUsers((result.data || []) as AdminProfile[]);
+      setLoading(false);
+    };
+
+    loadUsers();
+  }, [router]);
 
   return (
     <DashboardLayout>
@@ -63,7 +79,14 @@ export default async function AdminUsersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/10">
-                {users.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center text-gray-400">
+                      <Loader2 className="w-10 h-10 mx-auto mb-4 animate-spin" />
+                      <p>Loading users...</p>
+                    </td>
+                  </tr>
+                ) : users.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-12 text-center text-gray-400">
                       <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />

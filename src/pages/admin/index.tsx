@@ -1,6 +1,9 @@
+"use client";
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 import { DashboardLayout } from '@/components/layouts/dashboard-layout';
 import { checkAdminStatus, getAdminStatsAction } from '@/actions/admin-actions';
-import { redirect } from 'next/navigation';
 import {
   Users,
   FileText,
@@ -11,16 +14,40 @@ import {
   Shield,
 } from 'lucide-react';
 import Link from 'next/link';
+import type { AdminStats } from '@/types/admin.types';
 
-export default async function AdminDashboard() {
-  const { isAdmin } = await checkAdminStatus();
+export default function AdminDashboard() {
+  const router = useRouter();
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  if (!isAdmin) {
-    redirect('/dashboard');
+  useEffect(() => {
+    const loadStats = async () => {
+      setLoading(true);
+      const { isAdmin } = await checkAdminStatus();
+
+      if (!isAdmin) {
+        router.push('/dashboard');
+        return;
+      }
+
+      const result = await getAdminStatsAction();
+      setStats(result.data ?? null);
+      setLoading(false);
+    };
+
+    loadStats();
+  }, [router]);
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="text-center py-12">
+          <p className="text-gray-400">Loading admin statistics...</p>
+        </div>
+      </DashboardLayout>
+    );
   }
-
-  const result = await getAdminStatsAction();
-  const stats = result.data;
 
   if (!stats) {
     return (

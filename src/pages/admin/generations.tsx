@@ -1,19 +1,35 @@
+"use client";
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 import { DashboardLayout } from '@/components/layouts/dashboard-layout';
 import { checkAdminStatus, getAllGenerationsAction } from '@/actions/admin-actions';
-import { redirect } from 'next/navigation';
 import { Sparkles, Shield, CheckCircle, XCircle, Clock, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import type { AdminGeneration } from '@/types/admin.types';
 
-export default async function AdminGenerationsPage() {
-  const { isAdmin } = await checkAdminStatus();
+export default function AdminGenerationsPage() {
+  const router = useRouter();
+  const [generations, setGenerations] = useState<AdminGeneration[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  if (!isAdmin) {
-    redirect('/dashboard');
-  }
+  useEffect(() => {
+    const loadGenerations = async () => {
+      setLoading(true);
+      const { isAdmin } = await checkAdminStatus();
 
-  const result = await getAllGenerationsAction();
-  const generations = (result.data || []) as AdminGeneration[];
+      if (!isAdmin) {
+        router.push('/dashboard');
+        return;
+      }
+
+      const result = await getAllGenerationsAction();
+      setGenerations((result.data || []) as AdminGeneration[]);
+      setLoading(false);
+    };
+
+    loadGenerations();
+  }, [router]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -105,7 +121,14 @@ export default async function AdminGenerationsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/10">
-                {generations.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center text-gray-400">
+                      <Loader2 className="w-10 h-10 mx-auto mb-4 animate-spin" />
+                      <p>Loading generations...</p>
+                    </td>
+                  </tr>
+                ) : generations.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-12 text-center text-gray-400">
                       <Sparkles className="w-12 h-12 mx-auto mb-4 opacity-50" />

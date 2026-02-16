@@ -1,5 +1,8 @@
+"use client";
+
+import { useEffect, useState } from 'react';
 import { DashboardLayout } from '@/components/layouts/dashboard-layout';
-import { getGenerationsAction } from '@/actions/dashboard-actions';
+import { getGenerationsAction, type GenerationWithRelations } from '@/actions/dashboard-actions';
 import { History, FileText, Briefcase, Download, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -33,9 +36,20 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
-export default async function HistoryPage() {
-  const result = await getGenerationsAction();
-  const generations = result.data || [];
+export default function HistoryPage() {
+  const [generations, setGenerations] = useState<GenerationWithRelations[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadGenerations = async () => {
+      setLoading(true);
+      const result = await getGenerationsAction();
+      setGenerations((result.data || []) as GenerationWithRelations[]);
+      setLoading(false);
+    };
+
+    loadGenerations();
+  }, []);
 
   return (
     <DashboardLayout>
@@ -47,7 +61,12 @@ export default async function HistoryPage() {
           </p>
         </div>
 
-        {generations.length === 0 ? (
+        {loading ? (
+          <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center">
+            <Loader2 className="w-12 h-12 text-gray-500 mx-auto mb-4 animate-spin" />
+            <p className="text-gray-400">Loading generations...</p>
+          </div>
+        ) : generations.length === 0 ? (
           <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center">
             <History className="w-16 h-16 text-gray-500 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-white mb-2">
@@ -90,7 +109,7 @@ export default async function HistoryPage() {
                       <div>
                         <p className="text-xs text-gray-400">Resume</p>
                         <p className="text-sm text-white truncate">
-                          {(gen.resumes as any)?.file_name || 'Unknown'}
+                          {gen.resumes?.file_name || 'Unknown'}
                         </p>
                       </div>
                     </div>
@@ -102,8 +121,8 @@ export default async function HistoryPage() {
                       <div>
                         <p className="text-xs text-gray-400">Target Job</p>
                         <p className="text-sm text-white truncate">
-                          {(gen.job_descriptions as any)?.title || 'Unknown'} at{' '}
-                          {(gen.job_descriptions as any)?.company || 'Unknown'}
+                          {gen.job_descriptions?.title || 'Unknown'} at{' '}
+                          {gen.job_descriptions?.company || 'Unknown'}
                         </p>
                       </div>
                     </div>

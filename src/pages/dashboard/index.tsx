@@ -1,20 +1,37 @@
+"use client";
+
+import { useEffect, useState } from 'react';
 import { DashboardLayout } from '@/components/layouts/dashboard-layout';
 import { ResumeUploader } from '@/components/features/resume-uploader';
 import { JobDescriptionForm } from '@/components/features/job-description-form';
 import { getResumesAction, getJobDescriptionsAction, getGenerationsAction } from '@/actions/dashboard-actions';
 import { FileText, Briefcase, Sparkles, TrendingUp } from 'lucide-react';
 import { BentoGrid, BentoCard } from '@/components/ui/bento-grid';
+import type { Generation } from '@/types/supabase-helpers';
 
-export default async function DashboardPage() {
-  const [resumesResult, jobsResult, generationsResult] = await Promise.all([
-    getResumesAction(),
-    getJobDescriptionsAction(),
-    getGenerationsAction(),
-  ]);
+export default function DashboardPage() {
+  const [resumes, setResumes] = useState<Array<{ id: string }>>([]);
+  const [jobs, setJobs] = useState<Array<{ id: string }>>([]);
+  const [generations, setGenerations] = useState<Generation[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const resumes = resumesResult.data || [];
-  const jobs = jobsResult.data || [];
-  const generations = generationsResult.data || [];
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      const [resumesResult, jobsResult, generationsResult] = await Promise.all([
+        getResumesAction(),
+        getJobDescriptionsAction(),
+        getGenerationsAction(),
+      ]);
+
+      setResumes(resumesResult.data || []);
+      setJobs(jobsResult.data || []);
+      setGenerations(generationsResult.data || []);
+      setLoading(false);
+    };
+
+    loadData();
+  }, []);
 
   const completedGenerations = generations.filter((g) => g.status === 'completed');
   const avgScore =
@@ -41,7 +58,9 @@ export default async function DashboardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-400">Resumes</p>
-                <p className="text-2xl font-bold text-white">{resumes.length}</p>
+                <p className="text-2xl font-bold text-white">
+                  {loading ? '...' : resumes.length}
+                </p>
               </div>
               <FileText className="w-8 h-8 text-purple-400" />
             </div>
@@ -51,7 +70,9 @@ export default async function DashboardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-400">Job Matches</p>
-                <p className="text-2xl font-bold text-white">{jobs.length}</p>
+                <p className="text-2xl font-bold text-white">
+                  {loading ? '...' : jobs.length}
+                </p>
               </div>
               <Briefcase className="w-8 h-8 text-cyan-400" />
             </div>
@@ -61,7 +82,9 @@ export default async function DashboardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-400">Generated</p>
-                <p className="text-2xl font-bold text-white">{generations.length}</p>
+                <p className="text-2xl font-bold text-white">
+                  {loading ? '...' : generations.length}
+                </p>
               </div>
               <Sparkles className="w-8 h-8 text-pink-400" />
             </div>
@@ -71,7 +94,9 @@ export default async function DashboardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-400">Avg Score</p>
-                <p className="text-2xl font-bold text-white">{avgScore}%</p>
+                <p className="text-2xl font-bold text-white">
+                  {loading ? '...' : `${avgScore}%`}
+                </p>
               </div>
               <TrendingUp className="w-8 h-8 text-green-400" />
             </div>

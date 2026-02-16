@@ -1,19 +1,44 @@
+"use client";
+
+import { useEffect, useState } from 'react';
 import { DashboardLayout } from '@/components/layouts/dashboard-layout';
 import { ResumeJobSelector } from '@/components/features/resume-job-selector';
 import { getResumesAction, getJobDescriptionsAction } from '@/actions/dashboard-actions';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import type { JobDescription, Resume } from '@/types/supabase-helpers';
 
-export default async function GeneratePage() {
-  const [resumesResult, jobsResult] = await Promise.all([
-    getResumesAction(),
-    getJobDescriptionsAction(),
-  ]);
+export default function GeneratePage() {
+  const [resumes, setResumes] = useState<Resume[]>([]);
+  const [jobs, setJobs] = useState<JobDescription[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const resumes = resumesResult.data || [];
-  const jobs = jobsResult.data || [];
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      const [resumesResult, jobsResult] = await Promise.all([
+        getResumesAction(),
+        getJobDescriptionsAction(),
+      ]);
+
+      setResumes((resumesResult.data || []) as Resume[]);
+      setJobs((jobsResult.data || []) as JobDescription[]);
+      setLoading(false);
+    };
+
+    loadData();
+  }, []);
 
   const hasData = resumes.length > 0 && jobs.length > 0;
+  const resumeOptions = resumes.map((resume) => ({
+    id: resume.id,
+    file_name: resume.file_name ?? 'Untitled resume',
+  }));
+  const jobOptions = jobs.map((job) => ({
+    id: job.id,
+    title: job.title ?? 'Untitled role',
+    company: job.company ?? 'Unknown company',
+  }));
 
   return (
     <DashboardLayout>
@@ -27,7 +52,12 @@ export default async function GeneratePage() {
           </p>
         </div>
 
-        {!hasData && (
+        {loading ? (
+          <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 backdrop-blur-md border border-white/20 rounded-2xl p-8 mb-8 text-center">
+            <Loader2 className="w-12 h-12 text-purple-400 mx-auto mb-4 animate-spin" />
+            <p className="text-gray-300">Loading resumes and jobs...</p>
+          </div>
+        ) : !hasData && (
           <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 backdrop-blur-md border border-white/20 rounded-2xl p-8 mb-8 text-center">
             <Sparkles className="w-12 h-12 text-purple-400 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-white mb-2">
@@ -58,7 +88,7 @@ export default async function GeneratePage() {
           </div>
         )}
 
-        <ResumeJobSelector resumes={resumes} jobs={jobs} />
+        <ResumeJobSelector resumes={resumeOptions} jobs={jobOptions} />
 
         <div className="mt-8 p-6 bg-white/5 backdrop-blur-md border border-white/10 rounded-xl">
           <h3 className="text-lg font-bold text-white mb-3">

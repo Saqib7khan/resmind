@@ -1,16 +1,20 @@
-'use server';
-
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/client';
 import { jobDescriptionSchema } from '@/lib/schemas';
-import { revalidatePath } from 'next/cache';
+import { extractTextFromFile } from '@/lib/pdf-utils';
 import { z } from 'zod';
+import type { Generation, JobDescription, Resume } from '@/types/supabase-helpers';
+
+export type GenerationWithRelations = Generation & {
+  resumes: Pick<Resume, 'file_name'> | null;
+  job_descriptions: Pick<JobDescription, 'title' | 'company'> | null;
+};
 
 export const createJobDescriptionAction = async (
   data: z.infer<typeof jobDescriptionSchema>
 ) => {
   const validated = jobDescriptionSchema.parse(data);
   
-  const supabase = await createServerSupabaseClient();
+  const supabase = createClient();
   
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   
@@ -27,13 +31,13 @@ export const createJobDescriptionAction = async (
       raw_text: validated.description,
     })
     .select()
-    .single();
+    .single()
+    .returns<JobDescription>();
 
   if (error) {
     return { success: false, error: error.message };
   }
 
-  revalidatePath('/dashboard');
   return { success: true, data: jobDesc };
 };
 
@@ -44,7 +48,7 @@ export const uploadResumeAction = async (formData: FormData) => {
     return { success: false, error: 'No file provided' };
   }
 
-  const supabase = await createServerSupabaseClient();
+  const supabase = createClient();
   
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   
@@ -52,49 +56,88 @@ export const uploadResumeAction = async (formData: FormData) => {
     return { success: false, error: 'Not authenticated' };
   }
 
-  // Upload to storage
-  const fileExtension = file.name.split('.').pop();
-  const fileName = `${user.id}/${Date.now()}.${fileExtension}`;
-  
-  const { error: uploadError } = await supabase.storage
-    .from('resumes')
-    .upload(fileName, file, {
-      cacheControl: '3600',
-      upsert: false,
-    });
-
-  if (uploadError) {
-    return { success: false, error: uploadError.message };
-  }
-
-  // Extract text (simplified - in production use pdf-parse or similar)
-  const extractedText = await file.text().catch(() => '');
-
-  // Save to database
-  const { data: resume, error: dbError } = await supabase
-    .from('resumes')
-    .insert({
-      user_id: user.id,
-      file_path: fileName,
-      file_name: file.name,
-      file_size: file.size,
-      extracted_text: extractedText,
-    })
-    .select()
+  // Ensure user profile exists
+  const { data: existingProfile } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', user.id)
     .single();
 
-  if (dbError) {
-    // Clean up uploaded file
-    await supabase.storage.from('resumes').remove([fileName]);
-    return { success: false, error: dbError.message };
+  if (!existingProfile) {
+    // Create profile if it doesn't exist
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id: user.id,
+        email: user.email || '',
+        full_name: user.user_metadata?.full_name || user.email || 'User',
+        credits: 5, // Initialize with 5 credits
+      });
+
+    if (profileError) {
+      console.error('Profile creation error:', profileError);
+      return { success: false, error: `Failed to create profile: ${profileError.message}` };
+    }
   }
 
-  revalidatePath('/dashboard');
-  return { success: true, data: resume };
+  // Upload to storage
+  const fileExtension = file.name.split('.').pop()?.toLowerCase() || 'pdf';
+  const timestamp = Date.now();
+  const fileName = `${user.id}/${timestamp}.${fileExtension}`;
+  
+  try {
+    const { error: uploadError } = await supabase.storage
+      .from('resumes')
+      .upload(fileName, file, {
+        contentType: file.type || 'application/pdf',
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error('Upload error details:', uploadError);
+      return { success: false, error: `Upload failed: ${uploadError.message}` };
+    }
+
+    // Extract text from resume
+    let extractedText = '';
+    try {
+      extractedText = await extractTextFromFile(file);
+    } catch (error) {
+      console.warn('Text extraction failed:', error);
+      extractedText = `Resume: ${file.name}`;
+    }
+
+    // Save to database
+    const { data: resume, error: dbError } = await supabase
+      .from('resumes')
+      .insert({
+        user_id: user.id,
+        file_path: fileName,
+        file_name: file.name,
+        file_size: file.size,
+        extracted_text: extractedText || null,
+      })
+      .select()
+      .single()
+      .returns<Resume>();
+
+    if (dbError) {
+      // Clean up uploaded file
+      await supabase.storage.from('resumes').remove([fileName]);
+      console.error('Database error:', dbError);
+      return { success: false, error: `Failed to save: ${dbError.message}` };
+    }
+
+    return { success: true, data: resume };
+  } catch (error) {
+    console.error('Upload action error:', error);
+    return { success: false, error: `An error occurred: ${String(error)}` };
+  }
 };
 
 export const getResumesAction = async () => {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -106,7 +149,8 @@ export const getResumesAction = async () => {
     .from('resumes')
     .select('*')
     .eq('user_id', user.id)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .returns<Resume[]>();
 
   if (error) {
     return { success: false, error: error.message, data: [] };
@@ -116,7 +160,7 @@ export const getResumesAction = async () => {
 };
 
 export const getJobDescriptionsAction = async () => {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -128,7 +172,8 @@ export const getJobDescriptionsAction = async () => {
     .from('job_descriptions')
     .select('*')
     .eq('user_id', user.id)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .returns<JobDescription[]>();
 
   if (error) {
     return { success: false, error: error.message, data: [] };
@@ -138,7 +183,7 @@ export const getJobDescriptionsAction = async () => {
 };
 
 export const getGenerationsAction = async () => {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -154,7 +199,8 @@ export const getGenerationsAction = async () => {
       job_descriptions:job_id (title, company)
     `)
     .eq('user_id', user.id)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .returns<GenerationWithRelations[]>();
 
   if (error) {
     return { success: false, error: error.message, data: [] };
@@ -164,7 +210,7 @@ export const getGenerationsAction = async () => {
 };
 
 export const deleteResumeAction = async (id: string) => {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -194,6 +240,5 @@ export const deleteResumeAction = async (id: string) => {
     return { success: false, error: error.message };
   }
 
-  revalidatePath('/dashboard');
   return { success: true };
 };

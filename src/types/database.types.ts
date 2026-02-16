@@ -23,6 +23,7 @@ export type Database = {
           avatar_url: string | null;
           credits: number;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id: string;
@@ -32,6 +33,7 @@ export type Database = {
           avatar_url?: string | null;
           credits?: number;
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           id?: string;
@@ -41,7 +43,9 @@ export type Database = {
           avatar_url?: string | null;
           credits?: number;
           created_at?: string;
+          updated_at?: string;
         };
+        Relationships: [];
       };
       resumes: {
         Row: {
@@ -71,6 +75,7 @@ export type Database = {
           file_size?: number | null;
           created_at?: string;
         };
+        Relationships: [];
       };
       job_descriptions: {
         Row: {
@@ -97,6 +102,7 @@ export type Database = {
           raw_text?: string;
           created_at?: string;
         };
+        Relationships: [];
       };
       generations: {
         Row: {
@@ -110,6 +116,7 @@ export type Database = {
           pdf_url: string | null;
           status: 'pending' | 'processing' | 'completed' | 'failed';
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
@@ -122,6 +129,7 @@ export type Database = {
           pdf_url?: string | null;
           status?: 'pending' | 'processing' | 'completed' | 'failed';
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           id?: string;
@@ -134,7 +142,9 @@ export type Database = {
           pdf_url?: string | null;
           status?: 'pending' | 'processing' | 'completed' | 'failed';
           created_at?: string;
+          updated_at?: string;
         };
+        Relationships: [];
       };
     };
     Views: {
@@ -146,6 +156,9 @@ export type Database = {
     Enums: {
       user_role: 'user' | 'admin';
       generation_status: 'pending' | 'processing' | 'completed' | 'failed';
+    };
+    CompositeTypes: {
+      [_ in never]: never;
     };
   };
 };
