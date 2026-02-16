@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { User, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
 import type { Database } from '@/types/database.types';
@@ -23,10 +24,40 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [supabase, setSupabase] = useState<SupabaseClient<Database> | null>(null);
 
-  const supabase = createClient();
+  useEffect(() => {
+    let isMounted = true;
+
+    const initSupabase = async () => {
+      try {
+        const client = createClient();
+        if (isMounted) {
+          setSupabase(client);
+        }
+      } catch (error) {
+        console.error('Supabase client init failed:', error);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      void initSupabase();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const fetchProfile = React.useCallback(async (userId: string) => {
+    if (!supabase) {
+      return;
+    }
+
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -39,12 +70,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [supabase]);
 
   const refreshProfile = async () => {
-    if (user) {
-      await fetchProfile(user.id);
+    if (!supabase || !user) {
+      return;
     }
+
+    await fetchProfile(user.id);
   };
 
   useEffect(() => {
+    if (!supabase) {
+      return;
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -70,9 +107,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     });
 
     return () => subscription.unsubscribe();
-  }, [fetchProfile, supabase.auth]);
+  }, [fetchProfile, supabase]);
 
   const signOut = async () => {
+    if (!supabase) {
+      return;
+    }
+
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
