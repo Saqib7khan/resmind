@@ -1,7 +1,8 @@
 'use server';
 
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { openai, AI_MODELS } from '@/lib/openai';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { gemini, AI_MODELS } from '@/lib/gemini';
 import { resumeStructureSchema, feedbackSchema } from '@/lib/schemas';
 import { revalidatePath } from 'next/cache';
 import type { Generation, JobDescription, Resume, Profile } from '@/types/supabase-helpers';
@@ -20,8 +21,10 @@ export const generateResumeAction = async (resumeId: string, jobId: string) => {
     return { success: false, error: 'Not authenticated' };
   }
 
-  // Check credits
-  const { data: profile } = await supabase
+  // Check credits (use admin client to bypass RLS infinite recursion)
+  const adminClient = createAdminClient();
+
+  const { data: profile } = await adminClient
     .from('profiles')
     .select('credits')
     .eq('id', user.id)
@@ -71,13 +74,10 @@ export const generateResumeAction = async (resumeId: string, jobId: string) => {
   }
 
   try {
-    // Call OpenAI for analysis and restructuring
-    const completion = await openai.chat.completions.create({
-      model: AI_MODELS.GPT4,
-      messages: [
-        {
-          role: 'system',
-          content: `You are an expert ATS resume optimizer and career coach. Your task is to:
+    // Call Gemini for analysis and restructuring
+    const model = gemini.getGenerativeModel({
+      model: AI_MODELS.GEMINI_PRO,
+      systemInstruction: `You are an expert ATS resume optimizer and career coach. Your task is to:
 1. Analyze the user's resume against the target job description
 2. Provide a detailed analysis with score (0-100), strengths, weaknesses, and suggestions
 3. Generate a completely rewritten and optimized resume structure that perfectly matches the job requirements
@@ -148,22 +148,24 @@ Return your response in this exact JSON format:
     ]
   }
 }`,
-        },
-        {
-          role: 'user',
-          content: `ORIGINAL RESUME:\n${resume.extracted_text}\n\nTARGET JOB:\nTitle: ${job.title}\nCompany: ${job.company}\nDescription: ${job.raw_text}\n\nPlease analyze and generate an optimized resume.`,
-        },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.7,
+      generationConfig: {
+        temperature: 0.7,
+        responseMimeType: 'application/json',
+      },
     });
 
-    const responseContent = completion.choices[0]?.message?.content;
+    const result = await model.generateContent(
+      `ORIGINAL RESUME:\n${resume.extracted_text}\n\nTARGET JOB:\nTitle: ${job.title}\nCompany: ${job.company}\nDescription: ${job.raw_text}\n\nPlease analyze and generate an optimized resume.`
+    );
+
+    let responseContent = result.response.text();
     
     if (!responseContent) {
       throw new Error('No response from AI');
     }
 
+    // sanitize markdown json wrapping if any
+    responseContent = responseContent.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
     const aiResponse = JSON.parse(responseContent);
 
     // Validate the response
@@ -183,7 +185,7 @@ Return your response in this exact JSON format:
       .eq('id', generation.id);
 
     // Deduct credit
-    await supabase
+    await adminClient
       .from('profiles')
       .update({
         credits: profile.credits - 1,
@@ -217,7 +219,9 @@ export const getGenerationDetailsAction = async (generationId: string) => {
     return { success: false, error: 'Not authenticated', data: null };
   }
 
-  const { data, error } = await supabase
+  const adminClient = createAdminClient();
+
+  const { data, error } = await adminClient
     .from('generations')
     .select(`
       *,

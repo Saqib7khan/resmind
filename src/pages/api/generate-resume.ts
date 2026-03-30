@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createPagesServerSupabaseClient } from '@/lib/supabase/pages-server';
-import { openai, AI_MODELS } from '@/lib/openai';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { gemini, AI_MODELS } from '@/lib/gemini';
 import { feedbackSchema, resumeStructureSchema } from '@/lib/schemas';
 import type { Generation, JobDescription, Profile, Resume } from '@/types/supabase-helpers';
 
@@ -27,7 +28,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { data: profile } = await supabase
+    // Use admin client to bypass RLS infinite recursion on profiles table
+    const adminClient = createAdminClient();
+
+    const { data: profile } = await adminClient
       .from('profiles')
       .select('credits')
       .eq('id', user.id)
@@ -41,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    const { data: resume } = await supabase
+    const { data: resume } = await adminClient
       .from('resumes')
       .select('*')
       .eq('id', resumeId)
@@ -49,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .single()
       .returns<Resume>();
 
-    const { data: job } = await supabase
+    const { data: job } = await adminClient
       .from('job_descriptions')
       .select('*')
       .eq('id', jobId)
@@ -61,7 +65,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'Resume or job description not found' });
     }
 
-    const { data: generation, error: genError } = await supabase
+    const { data: generation, error: genError } = await adminClient
       .from('generations')
       .insert({
         user_id: user.id,
@@ -74,15 +78,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .returns<Generation>();
 
     if (genError || !generation) {
-      return res.status(500).json({ error: 'Failed to create generation' });
+      console.error('Generation insert error:', genError);
+      return res.status(500).json({ error: 'Failed to create generation', details: genError?.message });
     }
 
-    const completion = await openai.chat.completions.create({
-      model: AI_MODELS.GPT4,
-      messages: [
-        {
-          role: 'system',
-          content: `You are an expert ATS resume optimizer and career coach. Your task is to:
+    const model = gemini.getGenerativeModel({
+      model: AI_MODELS.GEMINI_PRO,
+      systemInstruction: `You are an expert ATS resume optimizer and career coach. Your task is to:
 1. Analyze the user's resume against the target job description
 2. Provide a detailed analysis with score (0-100), strengths, weaknesses, and suggestions
 3. Generate a completely rewritten and optimized resume structure that perfectly matches the job requirements
@@ -153,27 +155,29 @@ Return your response in this exact JSON format:
     ]
   }
 }`,
-        },
-        {
-          role: 'user',
-          content: `ORIGINAL RESUME:\n${resume.extracted_text}\n\nTARGET JOB:\nTitle: ${job.title}\nCompany: ${job.company}\nDescription: ${job.raw_text}\n\nPlease analyze and generate an optimized resume.`,
-        },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.7,
+      generationConfig: {
+        temperature: 0.7,
+        responseMimeType: 'application/json',
+      },
     });
 
-    const responseContent = completion.choices[0]?.message?.content;
+    const result = await model.generateContent(
+      `ORIGINAL RESUME:\n${resume.extracted_text}\n\nTARGET JOB:\nTitle: ${job.title}\nCompany: ${job.company}\nDescription: ${job.raw_text}\n\nPlease analyze and generate an optimized resume.`
+    );
+
+    let responseContent = result.response.text();
 
     if (!responseContent) {
       throw new Error('No response from AI');
     }
 
+    // sanitize markdown json wrapping if any
+    responseContent = responseContent.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
     const aiResponse = JSON.parse(responseContent);
     const feedback = feedbackSchema.parse(aiResponse.feedback);
     const resumeStructure = resumeStructureSchema.parse(aiResponse.resume);
 
-    await supabase
+    await adminClient
       .from('generations')
       .update({
         status: 'completed',
@@ -184,7 +188,7 @@ Return your response in this exact JSON format:
       })
       .eq('id', generation.id);
 
-    await supabase
+    await adminClient
       .from('profiles')
       .update({ credits: profile.credits - 1 })
       .eq('id', user.id);
@@ -196,20 +200,41 @@ Return your response in this exact JSON format:
   } catch (error) {
     console.error('AI generation error:', error);
     
-    if (error instanceof Error && error.message.includes('OPENAI_API_KEY')) {
+    // We don't have generation safely in scope here without restructuring the file heavily.
+    // Instead we can just try to extract it from req.body if it was passed, but it's generated in the try block.
+    // Wait, let's just create adminClient here and check if we can get the latest 'processing' generation for this user+resume+job combo to mark it failed.
+    try {
+      const { resumeId, jobId } = req.body as { resumeId?: string; jobId?: string };
+      const supabase = createPagesServerSupabaseClient(req, res);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && resumeId && jobId) {
+         const adminClient = createAdminClient();
+         await adminClient
+          .from('generations')
+          .update({ status: 'failed' })
+          .eq('user_id', user.id)
+          .eq('resume_id', resumeId)
+          .eq('job_id', jobId)
+          .eq('status', 'processing');
+      }
+    } catch (e) {
+      console.error('Failed to mark generation as failed:', e);
+    }
+
+    if (error instanceof Error && error.message.includes('GEMINI_API_KEY')) {
       return res.status(500).json({
         error: 'AI service is not configured',
-        details: 'The OpenAI API key is not properly configured. Please contact support.',
+        details: 'The Gemini API key is not properly configured. Please contact support.',
       });
     }
-    
+
     if (error instanceof Error && error.message.includes('JSON')) {
       return res.status(500).json({
         error: 'AI response parsing failed',
         details: 'The AI generated an invalid response. Please try again.',
       });
     }
-    
+
     return res.status(500).json({
       error: 'AI generation failed. Please try again.',
       details: error instanceof Error ? error.message : 'Unknown error',

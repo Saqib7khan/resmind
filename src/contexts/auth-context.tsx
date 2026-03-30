@@ -58,14 +58,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return;
     }
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-
-    if (!error && data) {
-      setProfile(data);
+    try {
+      // Fetch via API route to bypass RLS infinite recursion on profiles table
+      const res = await fetch('/api/profile');
+      if (res.ok) {
+        const { profile } = await res.json();
+        if (profile) {
+          setProfile(profile);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch profile:', error);
     }
   }, [supabase]);
 

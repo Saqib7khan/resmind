@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Database } from '@/types/database.types';
 
@@ -12,6 +13,7 @@ export async function updateSession(request: NextRequest) {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
     console.error('Missing Supabase environment variables. Please check .env.local');
@@ -58,9 +60,13 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user) {
-    // Get user profile to check role
-    const { data: profileData, error: profileError } = await supabase
+  if (user && serviceRoleKey) {
+    // Use admin client to bypass RLS infinite recursion on profiles table
+    const adminClient = createClient<Database>(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const { data: profileData, error: profileError } = await adminClient
       .from('profiles')
       .select('role')
       .eq('id', user.id)
@@ -86,3 +92,4 @@ export async function updateSession(request: NextRequest) {
 
   return supabaseResponse;
 }
+

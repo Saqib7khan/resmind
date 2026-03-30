@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase/client';
 import { loginSchema, signupSchema } from '@/lib/schemas';
 import { z } from 'zod';
-import type { Profile } from '@/types/supabase-helpers';
 
 export const loginAction = async (data: z.infer<typeof loginSchema>) => {
   const validated = loginSchema.parse(data);
@@ -18,16 +17,8 @@ export const loginAction = async (data: z.infer<typeof loginSchema>) => {
   }
 
   if (authData.user) {
-    // Get user profile to determine role
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', authData.user.id)
-      .single()
-      .returns<Pick<Profile, 'role'>>();
-
-    const redirectTo = profile?.role === 'admin' ? '/admin' : '/dashboard';
-    return { success: true, redirectTo };
+    // Redirect to dashboard — middleware will handle admin role redirect
+    return { success: true, redirectTo: '/dashboard' };
   }
 
   return { success: true, redirectTo: '/dashboard' };

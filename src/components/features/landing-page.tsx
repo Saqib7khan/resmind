@@ -278,7 +278,7 @@ export const LandingPage = () => {
       {/* Footer */}
       <footer className="border-t border-white/10 py-8 mt-20">
         <div className="container mx-auto px-4 text-center text-gray-400 text-sm">
-          <p>© 2026 ResMind 2.0. Built with Next.js 15, Supabase, and OpenAI.</p>
+          <p>© 2026 ResMind 2.0. Built with Next.js 15, Supabase, and Gemini AI.</p>
         </div>
       </footer>
     </div>

@@ -5,6 +5,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { createPagesServerSupabaseClient } from '@/lib/supabase/pages-server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { ResumePDFDocument } from '@/lib/pdf-generator';
 import React from 'react';
 import type { GenerationData } from '@/types/resume.types';
@@ -37,8 +38,9 @@ export default async function handler(
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Fetch generation data
-    const { data: generation, error: genError } = await supabase
+    // Use admin client to bypass RLS when fetching generation
+    const adminClient = createAdminClient();
+    const { data: generation, error: genError } = await adminClient
       .from('generations')
       .select('*')
       .eq('id', generationId)
@@ -46,13 +48,14 @@ export default async function handler(
       .single();
 
     if (genError || !generation) {
-      return res.status(404).json({ error: 'Generation not found' });
+      console.error('generate-pdf: genError:', genError);
+      return res.status(404).json({ error: 'Generation not found', details: genError?.message });
     }
 
     const genData = generation as unknown as GenerationData;
 
-    // Check if PDF already exists
-    if (genData.pdf_url) {
+    // Check if PDF already exists and is already using our internal proxy
+    if (genData.pdf_url && genData.pdf_url.startsWith('/api/download-pdf')) {
       return res.status(200).json({
         success: true,
         pdfUrl: genData.pdf_url,
@@ -73,7 +76,7 @@ export default async function handler(
 
     // Upload to Supabase Storage
     const fileName = `${user.id}/${generationId}.pdf`;
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await adminClient.storage
       .from('resumes')
       .upload(fileName, pdfBuffer, {
         contentType: 'application/pdf',
@@ -85,13 +88,11 @@ export default async function handler(
       return res.status(500).json({ error: 'Failed to upload PDF' });
     }
 
-    // Get public URL
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from('resumes').getPublicUrl(fileName);
+    // Build internal proxy URL for secure downloading
+    const publicUrl = `/api/download-pdf?generationId=${generationId}`;
 
     // Update generation with PDF URL
-    const { error: updateError } = await supabase
+    const { error: updateError } = await adminClient
       .from('generations')
       .update({ pdf_url: publicUrl })
       .eq('id', generationId);

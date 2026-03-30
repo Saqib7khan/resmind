@@ -32,27 +32,20 @@ export default function GenerationPage() {
       }
 
       setLoading(true);
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
-        setLoading(false);
-        return;
+      try {
+        const res = await fetch(`/api/get-generation?id=${generationId}`);
+        const result = await res.json();
+        
+        if (!res.ok || !result.success) {
+          console.error('Frontend Fetch Error on generation:', result.error || result.details);
+          setGeneration(null);
+        } else {
+          setGeneration(result.data);
+        }
+      } catch (err) {
+        console.error('Network syntax error fetching generation:', err);
+        setGeneration(null);
       }
-
-      const { data } = await supabase
-        .from('generations')
-        .select(`
-          *,
-          resumes:resume_id (*),
-          job_descriptions:job_id (*)
-        `)
-        .eq('id', generationId)
-        .eq('user_id', user.id)
-        .single()
-        .returns<GenerationWithRelations>();
-
-      setGeneration(data ?? null);
       setLoading(false);
     };
 

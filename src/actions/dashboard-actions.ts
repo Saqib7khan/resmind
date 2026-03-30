@@ -56,28 +56,27 @@ export const uploadResumeAction = async (formData: FormData) => {
     return { success: false, error: 'Not authenticated' };
   }
 
-  // Ensure user profile exists
-  const { data: existingProfile } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('id', user.id)
-    .single();
+  // Ensure user profile exists via server-side API (bypasses RLS)
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const profileRes = await fetch('/api/ensure-profile', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token
+          ? { Authorization: `Bearer ${session.access_token}` }
+          : {}),
+      },
+    });
 
-  if (!existingProfile) {
-    // Create profile if it doesn't exist
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .insert({
-        id: user.id,
-        email: user.email || '',
-        full_name: user.user_metadata?.full_name || user.email || 'User',
-        credits: 5, // Initialize with 5 credits
-      });
-
-    if (profileError) {
-      console.error('Profile creation error:', profileError);
-      return { success: false, error: `Failed to create profile: ${profileError.message}` };
+    if (!profileRes.ok) {
+      const errorData = await profileRes.json();
+      console.error('Profile ensure error:', errorData);
+      return { success: false, error: `Failed to create profile: ${errorData.error}` };
     }
+  } catch (err) {
+    console.error('Profile ensure fetch error:', err);
+    // Continue anyway — the profile might already exist
   }
 
   // Upload to storage
@@ -183,30 +182,14 @@ export const getJobDescriptionsAction = async () => {
 };
 
 export const getGenerationsAction = async () => {
-  const supabase = createClient();
-  
-  const { data: { user } } = await supabase.auth.getUser();
-  
-  if (!user) {
-    return { success: false, error: 'Not authenticated', data: [] };
+  try {
+    const res = await fetch('/api/get-generations');
+    const result = await res.json();
+    return result;
+  } catch (error) {
+    console.error('getGenerationsAction Error:', error);
+    return { success: false, error: 'Failed to fetch generations', data: [] };
   }
-
-  const { data, error } = await supabase
-    .from('generations')
-    .select(`
-      *,
-      resumes:resume_id (file_name),
-      job_descriptions:job_id (title, company)
-    `)
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .returns<GenerationWithRelations[]>();
-
-  if (error) {
-    return { success: false, error: error.message, data: [] };
-  }
-
-  return { success: true, data };
 };
 
 export const deleteResumeAction = async (id: string) => {

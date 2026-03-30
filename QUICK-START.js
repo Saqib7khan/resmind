@@ -34,12 +34,12 @@ console.log(`
     ✓ NEXT_PUBLIC_SUPABASE_URL
     ✓ NEXT_PUBLIC_SUPABASE_ANON_KEY
     ✓ SUPABASE_SERVICE_ROLE_KEY
-    ✓ OPENAI_API_KEY
+    ✓ GEMINI_API_KEY
 
 ✨ KEY FEATURES
   ✅ Resume upload with text extraction
   ✅ Job description management
-  ✅ AI-powered resume optimization (GPT-4o)
+  ✅ AI-powered resume optimization (Gemini)
   ✅ ATS score and feedback
   ✅ Professional PDF generation
   ✅ Download and regenerate
@@ -76,7 +76,7 @@ console.log(`
   • Use sample data from TESTING-GUIDE.md
   • Check console for error details
   • Verify .env.local is configured correctly
-  • Monitor OpenAI API usage
+  • Monitor Gemini API usage
   • Test on mobile for responsive design
 
 🎉 APPLICATION READY!
