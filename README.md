@@ -3,6 +3,9 @@
 <<<<<<< HEAD
 AI-powered resume optimizer built with Next.js + Supabase + OpenAI. Extracts text from uploaded resumes, analyzes against job descriptions, generates optimized resume JSON and PDF, and stores results in Supabase.
 
+
+<video src="D:\resmind\assets\localhost_3000 - Google Chrome 2026-03-30 09-04-33.mp4" width="400" controls></video>
+
 ## Quick start
 1. Install deps
 ```sh
